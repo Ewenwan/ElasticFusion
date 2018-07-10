@@ -1,3 +1,13 @@
+# 稠密SLAM
+     稠密SLAM重建目前也相对比较成熟，
+     从最开始的KinectFusion（TSDF数据结构 + ICP），
+     到后来的InfiniTAM（用哈希表来索引很稀疏的voxel）, 
+     ElasticFusion（用surfel点表示模型并用非刚性的图结构），
+     DynamicFusion（引入了体翘曲场这样深度数据通过体翘曲场的变换后，
+         才能融入到TSDF数据结构中，完成有非刚性物体的动态场景重建）都做的比较成熟。
+     工业界实现非常好的是微软的HoloLens，在台积电的24核DSP上把mesh simplification这些操作都搞了上去。
+
+
 # ElasticFusion #
 
 Real-time dense visual SLAM system capable of capturing comprehensive dense globally consistent surfel-based maps of room scale environments explored using an RGB-D camera.

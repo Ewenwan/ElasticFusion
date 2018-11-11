@@ -8,6 +8,174 @@
      工业界实现非常好的是微软的HoloLens，在台积电的24核DSP上把mesh simplification这些操作都搞了上去。
 
 
+# 文章评价
+     1、基于 RGB-D 稠密的三维重建，一般使用网格模型融合点云，
+        ElasticFusion 是为数不多使用 surfel 模型表示的。
+     2、传统的 SLAM 算法一般通过不断优化相机轨迹或者特征点的方式，来提高轨迹估计或者重建的精度，
+        这篇文章采用不断优化重建的 map 的方式，提高重建和位姿估计的精度。
+     3、优化采用 deformation graph 的形式，和 DynamicFusion 中优化的方式如出一辙。
+     4、融合了重定位算法（当相机跟丢时，重新计算相机的位姿）。
+     5、算法使用 OpenGL 对点云进行更新、融合、显示和投影。
+     6、算法融合 RGB-D 图像进行位姿估计，对于 RGB 图像通过颜色一致性约束计算位姿，
+        对于点云通过 ICP 算法计算位姿，ElasticFusion 融合了二者。
+     7、适合重建房间大小的场景，代码没有做优化，重建较大场景时，代码不能适用。
+
+# 算法流程
+     1、ElasticFusion 通过 RGB-D 图像配准计算位姿，
+        根据输入点云利用 ICP 算法配准计算位姿的方法参见博客：
+        http://blog.csdn.net/fuxingyin/article/details/51425721
+     2、计算相机位姿如果误差大于设定阈值，表示跟踪失败，启动重定位算法；
+        如果误差小于设定阈值，则进入下一部分。
+     3、利用 Random Ferns 进行全局的回环检测算法（后续博客单独介绍），
+        检测是否存在全局的回环，如果存在全局的回环，假设当前帧为 Icur
+        检测到和第 i 帧存在回环；再利用第一部中的跟踪算法计算当前帧和第 i
+        帧之间的位姿，计算得到位姿变换后，在图像中均匀抽取一些点，建立约束，
+        优化 node 参数（关于如何优化 map 后续文章还会展开介绍）。
+     4、在第 3 部中如果不存在全局的回环，则检测是否存在局部的回环（局部回环检测算法后续会展开介绍），
+        如果存在局部的回环，则同第 3 步，进行位姿估计，并且建立约束，优化 node 参数。
+     5、计算得到相机位姿后，将当前帧的点云和重建好的做融合，融合使用 openGL 的 shading language，
+        如果在存在局部的或者全局的回环，在使用 openGL 进行点的融合时候，将优化之后的节点变量，作用于全部的点。
+     6、融合到全局模型中后再用 openGL 投影得到当前视角下可以看到的点，用来对下一帧图像配准。
+     
+# surfel 表示模型
+     实时的 RGB-D 重建一般用 KinectFusion 算法中提到的 TSDF 模型，这篇文章用 surfel 模型（点表示模型），
+          对于每个点，存储了:
+          点的位置信息：(x,y,z)
+          面片得半径: r
+          法向量： n
+          颜色信息：(R,G,B)
+          点的获取时间信息：t
+
+          在进行点的融合更新时：点的位置信息，法向量，和颜色信息的
+          更新方法类似于 KinectFusion 采用加权融合的方式，
+          面片的半径通过场景表面离相机光心的距离的求得，
+          距离越大，面片的半径越大。
+          
+#  Randomized Ferns 在 ElasticFusion 中地位和作用
+     
+     ElasticFusion 通过 Randomized Ferns 重定位和回环检测，Randomized ferns 是实时的重定位和回环检测算法。
+     
+     Randomized Ferns 对关键帧图像编码，采用特殊的编码存储方式，加快图像比较的效率。
+     
+     https://blog.csdn.net/fuxingyin/article/details/51436430
+     
+
+
+
+# 安装
+     2. 编译前准备
+     2.1 硬件配置
+
+     本文使用的硬件配置如下：
+     + Intel i7-7700HQ
+     + NVIDIA® GeForce® GTX 1060（GPU必不可少，
+        否则无法完成编译,可参见ElasticFusion页面8.FAQ内容）
+     + 16GB DDR4 2400MHz 内存
+     2.2 软件配置
+         Ubuntu16.04系统，ElasticFusion也支持Ubuntu14.04和Unbuntu15.04，
+     2.3 库依赖
+         CMake　——　众所周知的跨平台的安装（编译）工具，推荐安装gui版本，安装命令如下:
+         sudo apt-get install cmake-qt-gui
+         git —— 版本控制软件，用于下载部分需要源码编译的依赖库，安装命令如下:
+         sudo apt-get install git
+         build-essential　——　Linux下的C/C++编译环境及依赖，如gcc和g++，安装命令如下:
+         sudo apt-get install build-essential
+         libusb-1.0-0-dev　——　用户空间的USB驱动库，安装命令如下:
+         sudo apt-get install libusb-1.0-0-dev
+         libudev-dev　——　用户空间的设备文件管理库，安装命令如下:
+         sudo apt-get install libudev-dev
+         openjdk-7-jdk ——　开源的Java开发环境（因为我已经装了Oracle的JDK，所以这里没有装），安装命令如下:
+         sudo apt-get install openjdk-7-jdk
+         freeglut3-dev —— 开源的OpenGL库，安装命令如下:
+         sudo apt-get install freeglut3-dev
+         python-vtk —— python版的图形可视化库（vtk），安装命令如下:
+         sudo apt-get install python-vtk
+         libvtk-java —— jave版的图形可视化库（vtk），安装命令如下:
+         sudo apt-get install libvtk-java
+         libglew-dev —— OpenGL库，安装命令如下:
+         sudo apt-get install libglew-dev
+         libsuitesparse-dev —— 稀疏矩阵运算库，安装命令如下:
+         sudo apt-get install libsuitesparse-dev
+         libeigen3-dev —— 著名的矩阵运算库，安装命令如下:
+         sudo apt-get install libeigen3-dev
+         zlib1g-dev —— 数据压缩库，安装命令如下:
+         sudo apt-get install zlib1g-dev
+         libjpeg-dev —— JPEG图像压缩库，安装命令如下:
+         sudo apt-get install libjpeg-dev
+         上述的库依赖均可以通过Ubuntu自带的apt-get安装，之所以分别列开，
+         也是为了让读者明白各个依赖库的作用和功能，一键安装命令如下:
+         sudo apt-get install -y cmake-qt-gui git build-essential 
+         libusb-1.0-0-dev libudev-dev openjdk-7-jdk freeglut3-dev 
+         libglew-dev libsuitesparse-dev libeigen3-dev zlib1g-dev libjpeg-dev
+         
+         CUDA版本大于7.0。 
+         OpenNI2 
+               git clone https://github.com/occipital/OpenNI2
+               cd OpenNI2
+               mkdir build && cd build
+               cmake ..
+               make -j8
+               sudo make install
+               sudo ldconfig 
+         Pangolin
+               Pangolin是对OpenGL进行封装的轻量级的OpenGL输入/输出和视频显示的库。
+               可以用于3D视觉和3D导航的视觉图，可以输入各种类型的视频、
+               并且可以保留视频和输入数据用于debug。
+               编译命令如下:
+          
+               git clone https://github.com/stevenlovegrove/Pangolin.git
+               cd Pangolin
+               mkdir build && cd build
+               cmake ..
+               make -j8
+               sudo make install
+               sudo ldconfig 
+     3. 编译过程
+
+     首先通过git下载源码，命令如下:
+     git clone https://github.com/mp3guy/ElasticFusion.git
+     ElasticFusion文件夹中包含三个子文件夹，分别是Core，GPUTest和GUI，编译顺序如下所示。
+     3.1 Core编译
+
+          cd ElasticFusion
+          cd Core
+          mkdir build && cd build
+          cmake ..
+          make -j8
+          sudo make install
+          sudo ldconfig
+
+     3.2 GPUTest
+
+          cd ElasticFusion
+          cd GPUTest
+          mkdir build && cd build
+          cmake ..
+          make -j8
+          sudo make install
+          sudo ldconfig
+
+     3.3 GUI
+
+          cd ElasticFusion
+          cd GUI
+          mkdir build && cd build
+          cmake ..
+          make -j8
+          sudo make install
+          sudo ldconfig
+     
+     4. 运行datasets
+
+          在此处下载数据集, 运行命令如下:
+          www.doc.ic.ac.uk/~sleutene/datasets/elasticfusion/dyson_lab.klg   1.1 GB
+          
+          cd ElasticFusion
+          cd GUI/build
+          ./ElasticFusion -l dyson_lab.klg
+
+
+ 
 # ElasticFusion #
 
 Real-time dense visual SLAM system capable of capturing comprehensive dense globally consistent surfel-based maps of room scale environments explored using an RGB-D camera.
